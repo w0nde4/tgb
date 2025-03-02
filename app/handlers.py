@@ -9,90 +9,64 @@ from app.load_texts import load_texts
 
 router = Router()
 
-texts = load_texts(r'C:\Users\oleg7\tgb\app\texts.json')
+questions = load_texts(r'C:\Users\oleg7\tgb\app\ovz.json')["modul_2"]
 
     
 class SurveyStates(StatesGroup):
-    m1_q1 = State()
-    m1_q2 = State()
-    m1_q3 = State()
-    m1_q4 = State()
-    m1_q5 = State()
-    m1_q6 = State()
-    m1_q7 = State()
-    m1_q8 = State()
-    m1_q9 = State()
-    m1_q10 = State()
-    m2 = State()
+    start = State()
+    @staticmethod
+    def get_question_state(question_id: int) -> State:
+        return State(state=f'question_{question_id}')
     
-
+   
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    await state.set_state(SurveyStates.m1_q1)
-    await message.answer(texts["start"])
-    await message.answer(texts["ready"], reply_markup=kb.ready)
+    await message.answer("Начало", reply_markup=kb.ready)
+    await state.set_state(state=SurveyStates.start)
 
 
-@router.message(SurveyStates.m1_q1)
-async def q1(message: Message, state: FSMContext):
-    await state.set_state(SurveyStates.m1_q2)
-    await message.answer(texts["q1"], reply_markup=kb.q1)
+@router.message(Command('stop'))
+async def cmd_stop(message: Message, state: FSMContext):
+    await message.answer("Завершение")
+    await state.clear()
 
 
-@router.message(SurveyStates.m1_q2)
-async def q2(message: Message, state: FSMContext):
-    await state.set_state(SurveyStates.m1_q3)
-    await message.answer(texts["q2"], reply_markup=kb.q2)
+@router.message(SurveyStates.start)
+async def start_survey(message: Message, state: FSMContext):
+    if questions:
+        await state.set_state(SurveyStates.get_question_state(questions[0]["id"]))
+        await ask_question(message, questions[0])
 
 
-@router.message(SurveyStates.m1_q3)
-async def q3(message: Message, state: FSMContext):
-    await state.set_state(SurveyStates.m1_q4)
-    await message.answer(texts["q3"], reply_markup=kb.q3)
+@router.message(F.text)
+async def handle_question(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if not current_state or not current_state.startswith("@:question_"):
+        return 
+
+    question_id = int(current_state.split("_")[1])
+    print(f"Текущий вопрос ID: {question_id}")
+
+    current_question = next((q for q in questions if q["id"] == question_id), None)
+    if not current_question:
+        await message.answer("Ошибка: вопрос не найден.")
+        return
+
+    next_question_id = question_id + 1
+    next_question = next((q for q in questions if q["id"] == next_question_id), None)
+    if next_question:
+        await state.set_state(SurveyStates.get_question_state(next_question_id))
+        await ask_question(message, next_question)
+    else:
+        await message.answer("Спасибо за участие в опросе!")
+        await state.clear()
 
 
-@router.message(SurveyStates.m1_q4)
-async def q4(message: Message, state: FSMContext):
-    await state.set_state(SurveyStates.m1_q5)
-    await message.answer(texts["q4"], reply_markup=kb.q4)
-
-
-@router.message(SurveyStates.m1_q5)
-async def q5(message: Message, state: FSMContext):
-    await state.set_state(SurveyStates.m1_q6)
-    await message.answer(texts["q5"], reply_markup=kb.q5)
-
-
-@router.message(SurveyStates.m1_q6)
-async def q6(message: Message, state: FSMContext):
-    await state.set_state(SurveyStates.m1_q7)
-    await message.answer(texts["q6"], reply_markup=kb.q6)
-
-
-@router.message(SurveyStates.m1_q7)
-async def q7(message: Message, state: FSMContext):
-    await state.set_state(SurveyStates.m1_q8)
-    await message.answer(texts["q7"], reply_markup=kb.q7)
-
-
-@router.message(SurveyStates.m1_q8)
-async def q8(message: Message, state: FSMContext):
-    await state.set_state(SurveyStates.m1_q9)
-    await message.answer(texts["q8"], reply_markup=kb.q8)
-
-
-@router.message(SurveyStates.m1_q9)
-async def q9(message: Message, state: FSMContext):
-    await state.set_state(SurveyStates.m1_q10)
-    await message.answer(texts["q9"], reply_markup=kb.q9)
-
-
-@router.message(SurveyStates.m1_q10)
-async def q10(message: Message, state: FSMContext):
-    await state.set_state(SurveyStates.m2)
-    await message.answer(texts["q10"], reply_markup=kb.q10)
-
-
-@router.message(SurveyStates.m2)
-async def m2(message: Message):
-    await message.answer(texts["m2"], reply_markup=ReplyKeyboardRemove())
+async def ask_question(message: Message, question: dict):
+    if question["type"] == "text":
+        await message.answer(question["text"])
+    """
+    elif question["type"] == "image":
+        with open(f"data/images/{question['image']}", "rb") as photo:
+            await message.answer_photo(photo, caption=question["text"])
+    """
