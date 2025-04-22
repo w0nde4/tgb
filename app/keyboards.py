@@ -1,82 +1,59 @@
-from aiogram.types import (ReplyKeyboardMarkup, KeyboardButton,
-                           InlineKeyboardMarkup, InlineKeyboardButton)
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+from app.encoder import get_callback_data
+from app.load_texts import load_texts
+
+(data, options_scale, questions) = load_texts(r'app\ovz.json')
 
 
-ready = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text='Подтвердить готовность')]],
-    resize_keyboard=True,
-    input_field_placeholder='Нажмите, когда будете готовы')
+def create_single_option_markup(question):
+    builder = InlineKeyboardBuilder()
+    
+    if 'options' in question:
+        for opt in question['options']:
+            callback_data = f"single:{get_callback_data(opt)}"
+            print(f"Creating button: {opt} with callback: {callback_data}")  # Отладка
+            builder.button(
+                text=opt,
+                callback_data=callback_data
+            )
+    
+    builder.adjust(1)
+    return builder.as_markup()
 
 
-q1 = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text='Менее 18')],
-    [KeyboardButton(text='18-34'),
-    KeyboardButton(text='35-44')],
-    [KeyboardButton(text='45-54'), 
-    KeyboardButton(text='55 и более')]],
-    resize_keyboard=True,
-    input_field_placeholder='Укажите возраст')
+def create_multiple_options_markup(question, selected=None):
+    if selected is None:
+        selected = []
+        
+    builder = InlineKeyboardBuilder()
+    
+    for opt in question['options']:
+        builder.button(
+            text=f"{'✅ ' if opt in selected else ''}{opt}",
+            callback_data=f"multi:{get_callback_data(opt)}"
+        )
+    
+    builder.button(text="✔️ Готово", callback_data="multi_submit")
+    builder.adjust(1)
+    return builder.as_markup()
 
-q2 = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Мужской'), KeyboardButton(text='Женский')]],
-                        resize_keyboard=True,
-                        input_field_placeholder='Укажите пол')
 
-q3 = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Куйбышевский'), KeyboardButton(text='Самарский')],
-                                    [KeyboardButton(text='Ленинский'), KeyboardButton(text='Железнодорожный')],
-                                    [KeyboardButton(text='Октябрьский'), KeyboardButton(text='Советский')],
-                                    [KeyboardButton(text='Промышленный'), KeyboardButton(text='Кировский')],
-                                    [KeyboardButton(text='Красноглининский'), KeyboardButton(text='Частный сектор в пригороде')]],
-                        resize_keyboard=True,
-                        input_field_placeholder='Укажите районы')
-
-q4 = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Проблемы со зрением')],
-                                    [KeyboardButton(text='Проблемы со слухом')],
-                                    [KeyboardButton(text='Проблемы опорно-двигательного аппарата')],
-                                    [KeyboardButton(text='Ментальные особенности')]],
-                        resize_keyboard=True,
-                        input_field_placeholder='Укажите ограничения здоровья')
-
-q5 = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Наличие голосового помощника')],
-                                    [KeyboardButton(text='Индивидуальная настройка масштаба приложения')],
-                                    [KeyboardButton(text='Управление жестами')],
-                                    [KeyboardButton(text='Применение методики \"Ясный язык\"')],
-                                    [KeyboardButton(text='Возможность быстро поделиться местоположением')],
-                                    [KeyboardButton(text='Возможность оперативно отправить сигнал тревоги с указанием своего местоположения')]],
-                        resize_keyboard=True,
-                        input_field_placeholder='Укажите дополнительные функциональные возможности')
-
-q6 = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Указать местоположение на карте и описать проблему')],
-                                    [KeyboardButton(text='Отправить сообщение в службу поддержки')],
-                                    [KeyboardButton(text='Оставить отзыв после завершения маршрута')]],
-                        resize_keyboard=True,
-                        input_field_placeholder='Укажите удобный способ об изменении информации')
-
-q7 = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Часто'),
-                                    KeyboardButton(text='Иногда')],
-                                    [KeyboardButton(text='Редко'),
-                                    KeyboardButton(text='Не буду')]],
-                        resize_keyboard=True,
-                        input_field_placeholder='Выберите частоту пользования')
-
-q8 = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Готов участвовать в сборе данных дорожных объектов во время прохождения своих ежедневных маршрутов')],
-                                    [KeyboardButton(text='Готов примкнуть к волонтёрам для массового сбора информации о дорожных объектах города')],
-                                    [KeyboardButton(text='Готов рассказать о проекте знакомым')],
-                                    [KeyboardButton(text='Не готов')]],
-                        resize_keyboard=True,
-                        input_field_placeholder='Расскажите о готовности помочь')
-
-q9 = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Социальные объекты'),
-                                    KeyboardButton(text='Медицинский учреждения')],
-                                    [KeyboardButton(text='Культурные учреждения'),
-                                    KeyboardButton(text='Образовательные учреждения')],
-                                    [KeyboardButton(text='Развлекательные учреждения'),
-                                    KeyboardButton(text='Религиозные объекты')],
-                                    [KeyboardButton(text='Общественные организации')]],
-                        resize_keyboard=True,
-                        input_field_placeholder='Укажите объекты')
-
-q10 = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Помощь разработчикам в понимании Ваших потребностей для комфортного маршрута')],
-                                    [KeyboardButton(text='Предоставление информации о сложностях передвижения на улице')],
-                                    [KeyboardButton(text='Исполнение запроса на прохождение теста')]],
-                        resize_keyboard=True,
-                        input_field_placeholder='Укажите цель')
+def create_level_option_markup(level):
+    """Create inline keyboard markup for a level within a question"""
+    builder = InlineKeyboardBuilder()
+    
+    # Определяем варианты ответов для уровня
+    if level['options'] == "options_scale":
+        options = options_scale
+    else:
+        options = level['options']
+    
+    for opt in options:
+        builder.button(
+            text=opt,
+            callback_data=f"level:{get_callback_data(opt)}"
+        )
+    
+    builder.adjust(1)
+    return builder.as_markup()
