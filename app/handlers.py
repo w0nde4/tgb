@@ -46,7 +46,6 @@ async def ask_question(message: Message, state: FSMContext):
     module = user_data['current_module']
     q_id = user_data['current_question_id']
     question = questions[module][q_id]
-
     current_level = user_data.get('current_level', 0)
 
     if 'levels' in question and current_level < len(question['levels']):
@@ -94,10 +93,12 @@ async def ask_question(message: Message, state: FSMContext):
             await message.answer(level_text)
             await state.update_data(current_level=current_level + 1)
             await ask_question(message, state)  # Рекурсивно вызываем для следующего уровня
-    else:
-        # Если это обычный вопрос или все уровни обработаны,
-        # сбрасываем current_level и продолжаем как обычно
-        await state.update_data(current_level=0)
+        
+        return
+    
+    # Если это обычный вопрос или все уровни обработаны,
+    # сбрасываем current_level и продолжаем как обычно
+    await state.update_data(current_level=0)
 
     if question['type'] == 'single_option':
         markup = kb.create_single_option_markup(question)
@@ -271,11 +272,18 @@ async def handle_next_question(message: Message, state: FSMContext):
     global question_lock
 
     if question_lock.locked():
+        print("DEBUG: Question lock is locked, returning")
         return
+    
+    print("DEBUG: Entering handle_next_question")
+    
     async with question_lock:
         data = await state.get_data()
         module = data['current_module']
         q_id = data['current_question_id']
+
+        print(f"DEBUG: Current module: {module}, Current question ID: {q_id}")
+
         question = questions[module][q_id]
         next_q = None
         next_module = module
@@ -286,25 +294,35 @@ async def handle_next_question(message: Message, state: FSMContext):
     # Check for conditional navigation
     if 'if' in question:
         answer = data['answers'].get(f"{module}_{q_id}")
+
+        print(f"DEBUG: Found conditional navigation. Answer: {answer}")
+
         if isinstance(answer, list) and answer:
             # For multiple_options, use the first selected option
             answer = answer[0]
         
         if answer in question['if']:
             next_q = question['if'][answer].get('id')
+            print(f"DEBUG: Condition matched. Next question ID: {next_q}")
     
     # If no condition matched or no conditional navigation
     if not next_q:
         ids = sorted(list(questions[module].keys()))
         idx = ids.index(q_id)
+
+        print(f"DEBUG: Current question index: {idx}, Total questions: {len(ids)}")
+
         if idx + 1 < len(ids):
             next_q = ids[idx + 1]
+            print(f"DEBUG: Moving to next question in module: {next_q}")
         else:
             # End of current module
             if module == 'modul_1':
                 next_module = 'modul_2'
                 next_q = 1
+                print(f"DEBUG: End of module 1, moving to module 2, question 1")
             else:
+                print(f"DEBUG: End of survey, clearing state")
                 # End of survey
                 await message.answer("Опрос завершен! Спасибо за участие.")
                 
@@ -315,11 +333,14 @@ async def handle_next_question(message: Message, state: FSMContext):
                 await state.clear()
                 return
     
+    print(f"DEBUG: Updating state - Module: {next_module}, Question ID: {next_q}, resetting level to 0")
     await state.update_data(
         current_module=next_module,
-        current_question_id=next_q
+        current_question_id=next_q,
+        current_level = 0
     )
-    
+
+    print(f"DEBUG: Calling ask_question")
     await ask_question(message, state)
 
 
@@ -337,12 +358,15 @@ async def handle_level_option_select(callback: CallbackQuery, state: FSMContext)
         module = data['current_module']
         q_id = data['current_question_id']
         current_level = data.get('current_level', 0)
+
+        print(f"DEBUG: Handling level option - Module: {module}, Question ID: {q_id}, Level: {current_level}")
+
         question = questions[module][q_id]
         
         if 'levels' not in question or current_level >= len(question['levels']):
             await callback.answer("Ошибка: уровень не найден")
             return
-            
+
         level = question['levels'][current_level]
         
         # Определяем варианты ответов для текущего уровня
@@ -356,6 +380,8 @@ async def handle_level_option_select(callback: CallbackQuery, state: FSMContext)
             (opt for opt in options if get_callback_data(opt) == hashed_opt),
             None
         )
+
+        print(f"DEBUG: Selected option: {original_opt}")
         
         if not original_opt:
             await callback.answer("Ошибка выбора!")
@@ -368,13 +394,28 @@ async def handle_level_option_select(callback: CallbackQuery, state: FSMContext)
         
         # Переходим к следующему уровню или вопросу
         next_level = current_level + 1
+
+        print(f"DEBUG: Next level would be: {next_level}, Total levels: {len(question['levels'])}")
+
         if next_level < len(question['levels']):
+            print(f"DEBUG: Moving to next level: {next_level}")
             # Переходим к следующему уровню
             await state.update_data(answers=answers, current_level=next_level)
-            await ask_question(callback.message, state)
         else:
+            print(f"DEBUG: All levels completed, moving to next question")
+            key = f"{module}_{q_id}"
+            answers[key] = "completed all levels"
             # Все уровни закончились, переходим к следующему вопросу
             await state.update_data(answers=answers, current_level=0)
-            await handle_next_question(callback.message, state)
+
+        if next_level < len(question['levels']):
+            should_go_to_next_level = True
+        else:
+            should_go_to_next_level = False
+    
+    if should_go_to_next_level:
+        await ask_question(callback.message, state)
+    else:
+        await handle_next_question(callback.message, state)
         
-        await callback.answer()
+    await callback.answer()
