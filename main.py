@@ -1,24 +1,34 @@
+"""Основной файл для запуска бота"""
 import asyncio
-from aiogram import Bot, Dispatcher
+import logging
+import os
+from aiogram import Bot
+from dotenv import load_dotenv
 
-from app.handlers import router
-from app.database.models import async_main
+from app import setup_bot
+
 
 async def main():
-    await async_main()
+    """Основная функция запуска бота"""
+    # Загружаем переменные окружения
+    load_dotenv()
     
-    TOKEN = None
-    with open(r'C:\Users\oleg7\tgb\app\token.txt') as f:
-        TOKEN = f.read().strip()
-
-    bot = Bot(token=TOKEN)
-    dp = Dispatcher()
-    dp.include_router(router)
+    # Получаем токен бота из переменных окружения
+    token = os.getenv("BOT_TOKEN")
+    if not token:
+        raise ValueError("BOT_TOKEN не установлен в переменных окружения")
+    
+    # Настраиваем бота
+    bot, dp = await setup_bot(token)
+    
+    # Запускаем опрос событий в режиме long polling
     await dp.start_polling(bot)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         asyncio.run(main())
-    except KeyboardInterrupt:
-        print('Бот выключен')
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Бот остановлен")
+    except Exception as e:
+        logging.error(f"Критическая ошибка: {e}", exc_info=True)
